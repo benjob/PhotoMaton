@@ -1,0 +1,368 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" 
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://xmlns.jcp.org/jsf/facelets"
+	xmlns:h="http://xmlns.jcp.org/jsf/html"
+	xmlns:f="http://xmlns.jcp.org/jsf/core">
+
+<!--
+	Ideally these elements aren't created until it's confirmed that the 
+	client supports video/camera, but for the sake of illustrating the 
+	elements involved, they are created with markup (not JavaScript)
+-->
+<head>
+
+<style>
+.crop {
+  position:relative;
+  border:1px dashed white;
+  cursor:move !important;
+}
+
+.resize-handle {
+  position: absolute;
+  bottom:0px;
+  right:0px;
+  width: 0px;
+  height: 0px;
+  border-style: solid;
+  border-width: 0 0 16px 16px;
+  border-color: transparent transparent #AAA transparent;
+  cursor: nw-resize !important;
+}
+</style>
+
+<script type="text/javascript">
+//<![CDATA[
+var videoObj = { 
+	audio: false,
+	video: {
+		width: 640,
+		height: 480
+	}
+};
+var cropDimensions = {
+	width: 180,
+	height: 240,
+	marginTop: 0,
+    marginLeft: 0,
+    getAspectRatio: function() {
+        return cropDimensions.width / cropDimensions.height;
+    }
+};
+
+var getCumulativeOffset = function(element) {
+    var top = 0, left = 0;
+    do {
+        top += element.offsetTop || 0;
+        left += element.offsetLeft || 0;
+        element = element.offsetParent;
+    } while( element );
+
+    return {
+        top: top,
+        left: left
+    };
+};
+
+var video, editor, canvas, photomaton, crop, resizeHandle, saveFileLink, saveFileFrame;
+
+function showEditor() {
+    editor.style.display = "block";
+
+    //place the crop properly
+    crop.setAttribute("style","width:" + cropDimensions.width.toString() + "px;height:" + cropDimensions.height.toString() + "px;");
+    crop.style.width = cropDimensions.width.toString() + "px";
+    crop.style.height = cropDimensions.height.toString() + "px";
+    cropDimensions.marginLeft = (( videoObj.video.width - cropDimensions.width ) / 2);
+    crop.style["margin-left"] = cropDimensions.marginLeft.toString() + "px";
+    cropDimensions.marginTop = -1 * videoObj.video.height + (( videoObj.video.height - cropDimensions.height ) / 2);;
+    crop.style["margin-top"] = cropDimensions.marginTop.toString() + "px";
+    saveButton.style.position = "absolute";
+    saveButton.style.top = (videoObj.video.height + 10).toString() + "px";
+    saveButton.style["margin-left"] = (videoObj.video.width / 2).toString() + "px";
+    
+    var previousPos,
+        currentPos,
+        isDragging = false,
+        isResizing = false,
+        cropCumulativeOffset = getCumulativeOffset( crop );
+
+    var onCropDrag = function (event) {
+    	event.preventDefault();
+        if ( isDragging && !isResizing ) {
+            previousPos = currentPos;
+            currentPos = [parseInt(event.clientX), parseInt(event.clientY)];
+
+            var cropDimensionsMarginLeft = cropDimensions.marginLeft + (currentPos[0] - previousPos[0]);
+            if ( cropDimensionsMarginLeft > 0 && cropDimensionsMarginLeft + cropDimensions.width < videoObj.video.width ) {
+                cropDimensions.marginLeft = cropDimensionsMarginLeft;
+                crop.style["margin-left"] = cropDimensions.marginLeft.toString() + "px";
+            }
+            var cropDimensionsMarginTop = cropDimensions.marginTop + (currentPos[1] - previousPos[1]);
+            if ( cropDimensionsMarginTop > (-1 * videoObj.video.height) && (videoObj.video.height + cropDimensionsMarginTop) + cropDimensions.height < videoObj.video.height ) {
+                cropDimensions.marginTop = cropDimensionsMarginTop;
+                crop.style["margin-top"] = cropDimensions.marginTop.toString() + "px";
+            }
+        }
+        return false;
+    }
+    
+    // Grab and move the crop
+    crop.ondragstart = function ( event ) {
+        if ( !isResizing ) {
+            isDragging = true;
+            
+            previousPos = [parseInt(event.clientX), parseInt(event.clientY)];
+            currentPos = [parseInt(event.clientX), parseInt(event.clientY)];
+            //next line is some Firefox crap where you need to set some data to be able to drag
+            event.dataTransfer.setData('Text', "javascript:void(0);");
+
+            document.addEventListener("dragover", onCropDrag, true);
+        }
+    };
+
+    crop.ondragend = function (event) {
+        isDragging = false;
+
+        document.removeEventListener("dragover", onCropDrag, true);
+        
+        cropCumulativeOffset = getCumulativeOffset( crop )
+    };
+
+    crop.ondrop = function (event) {
+    	event.preventDefault();
+        if ( event.stopPropagation ) {
+            event.stopPropagation();
+        }
+        return false;
+    }
+
+    var onCropResize = function (event) {
+        event.preventDefault();
+        if ( isResizing && !isDragging ) {
+            var mouseX = parseInt(event.clientX);
+            var mouseY = parseInt(event.clientY);
+
+            var newWidth = 0;
+            var newHeight = 0;
+
+            var xAxisValue = 0;
+            var yAxisValue = 0;
+            //compute the corner for this mouseX value
+            var mouseXRelativeToCrop = (mouseX - cropCumulativeOffset.left);
+            var mouseYRelativeToCrop = mouseY - (cropCumulativeOffset.top - window.pageYOffset);
+            if ( mouseXRelativeToCrop <= 0 ) {
+                //The mouse is to the left of the top left corner
+                //for now do nothing.
+                //TODO: do something.
+            } else {
+                //X coordinate of the corner when Y = mouseY
+                xAxisValue = mouseYRelativeToCrop * cropDimensions.getAspectRatio();
+            }
+
+            if ( mouseYRelativeToCrop <= 0 ) {
+                //The mouse is over the top left corner
+                //for now do nothing.
+                //TODO: do something.
+            } else {
+                //Y coordinate of the corner when X = mouseX
+                yAxisValue = mouseXRelativeToCrop / cropDimensions.getAspectRatio();
+            }
+
+            if ( Math.abs( xAxisValue - mouseXRelativeToCrop ) <  Math.abs( yAxisValue - mouseYRelativeToCrop ) ) {
+                //the closest corner is close to the X axis
+                //redraw at this position
+                var newWidth = xAxisValue;
+                crop.style["width"] = newWidth.toString() + "px";
+                
+                cropDimensions.height = (newWidth / cropDimensions.getAspectRatio());
+                cropDimensions.width = newWidth; 
+                crop.style["height"] = cropDimensions.height.toString() + "px";
+            } else {
+                //the closest corner is close to the Y axis
+                var newHeight = yAxisValue;
+                crop.style["height"] = newHeight.toString() + "px";
+                
+                cropDimensions.width = (newHeight * cropDimensions.getAspectRatio()); 
+                cropDimensions.height = newHeight;
+                crop.style["width"] = cropDimensions.width.toString() + "px";
+            }
+        }
+    }
+
+    //Resize the crop
+    resizeHandle.ondragstart = function (event) {
+        if ( !isDragging ) {
+            isResizing = true;
+
+            //next line is some Firefox crap where you need to set some data to be able to drag
+            event.dataTransfer.setData('Text', "javascript:void(0);");
+            event.dataTransfer.setDragImage(null, 0, 0);
+            
+            document.addEventListener("dragover", onCropResize, true);
+        }
+    };
+
+    resizeHandle.ondragend = function (event) {
+        event.preventDefault();
+        isResizing = false;
+        
+        document.removeEventListener("dragover", onCropResize, true);
+    };
+
+    resizeHandle.ondragleave = function (event) {
+        event.preventDefault();
+    };
+
+    resizeHandle.ondragexit = function (event) {
+        event.preventDefault();
+    };
+
+    resizeHandle.ondrop = function (event) {
+        event.preventDefault();
+    };
+}
+
+function hideEditor() {
+    editor.style.display = "none";
+}
+
+function exportToFile( canvas ) {
+    /* if (navigator.appName == "Microsoft Internet Explorer") {
+        saveFileFrame.document.open("text/html", "replace");
+        saveFileFrame.document.write(data);
+        saveFileFrame.document.close();
+        saveFileFrame.focus()
+        saveFileFrame.document.execCommand('SaveAs', true, 'data.xls');
+    } else {
+        //Others
+        saveFileLink.setAttribute("href", data);
+        saveFileLink.setAttribute("target", "_blank");
+        saveFileLink.click();
+    }
+     */
+    var image = canvas.toDataURL("image/png");
+    saveFileLink.href = image;
+    saveFileLink.click();
+}
+
+function savePicture() {
+    var image = canvas.toDataURL();
+    var img = new Image();
+    img.src = image;
+    var context = canvas.getContext("2d");
+    canvas.width = cropDimensions.width;
+    canvas.height = cropDimensions.height;
+    img.onload = function() {
+    	context.drawImage(img, cropDimensions.marginLeft, cropDimensions.marginTop + videoObj.video.height, cropDimensions.width, cropDimensions.height, 0, 0, cropDimensions.width, cropDimensions.height);
+	};
+    exportToFile(canvas);
+	//hideEditor();
+}
+
+//<![CDATA[
+// Put event listeners into place
+window.addEventListener("DOMContentLoaded", function() {
+	video = document.getElementById("video");
+	editor = document.getElementById("editor");
+	canvas = document.getElementById("canvas");
+	photomaton = document.getElementById("photomaton");
+	crop = document.getElementById("crop");
+	saveFileLink = document.getElementById("saveFileLink");
+    saveFileFrame = document.getElementById("saveFileFrame");
+
+    resizeHandle = document.createElement('div');
+	resizeHandle.setAttribute("class", "resize-handle");
+	resizeHandle.setAttribute("draggable", "true");
+	crop.appendChild(resizeHandle);
+	
+	// Grab elements, create settings, etc.
+	var userMediaSupported = true,
+		errBack = function(error) {
+			console.log("Video capture error: ", error.code); 
+		},
+		track;
+
+	// Put video listeners into place
+	if(navigator.getUserMedia) { // Standard
+		navigator.getUserMedia(videoObj, function(stream) {
+			//only 1 media stream
+			track = stream.getTracks()[0];
+			video.src = stream;
+			video.play();
+		}, errBack);
+	} else if(navigator.webkitGetUserMedia) { // WebKit-prefixed
+		navigator.webkitGetUserMedia(videoObj, function(stream){
+			track = stream.getTracks()[0];
+			video.src = window.webkitURL.createObjectURL(stream);
+			video.play();
+		}, errBack);
+	} else if(navigator.mozGetUserMedia) { // Firefox-prefixed
+		navigator.mozGetUserMedia(videoObj, function(stream){
+			track = stream.getTracks()[0];
+			video.src = window.URL.createObjectURL(stream);
+			video.play();
+		}, errBack);
+	} else {
+		userMediaSupported = false;
+		return;
+	}
+
+	//Trigger photo take
+	document.getElementById("takePhotoBtn").addEventListener("click", function() {
+		var context = canvas.getContext("2d");
+        context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+
+        //Stop the video
+        track.stop();
+        
+        //Switch the video and the canvas
+        photomaton.style.display = "none";
+
+        showEditor();
+	});
+}, false);
+//]]>
+</script>
+</head>
+
+<!-- 
+	TODO: handle different camera resolutions. Here everything is hardcoded to 640x480
+ -->
+<div id="photoeditor" style="width:640px;height:480px;margin:auto;">
+	
+	<div id="photomaton">
+		<div>
+			<video id="video" width="640" height="480"></video>
+		</div>
+		<div style="position:absolute;top:400px;color:#FFF;text-align:center;font-size:20px;background-color: rgba(221, 221, 221, 0.3);width: 640px;padding: 10px 0;z-index: 2147483647;">
+			<button id="takePhotoBtn">Take Photo</button>
+		</div>
+	</div>
+	
+	<div id="editor" style="display:none;">
+		<div>
+			<div style="position:relative;">
+				<canvas id="canvas" width="640" height="480"/>
+			</div>
+			<!-- 
+				TODO: position and size of crop hardcoded here
+				Position the cropper always in the middle of the picture:
+					to compute margin-left:
+						( (640) Camera resolution - (360) crop size ) / 2 - 10
+					to compute margin-top:
+						-1 * Camera resolution - 10
+			 -->
+			<div id="crop" draggable="true" class="crop">
+			</div>
+		</div>
+        <button id="saveButton" onclick="savePicture();">Save</button>
+        <a id="saveFileLink" href="javascript:void(0);" download="image.png" target="_blank" style="display:none;"></a>
+        <iframe id="saveFileFrame" style="display:none;"></iframe>
+	</div>
+</div>
+
+
+</html>
