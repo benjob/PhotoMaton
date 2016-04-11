@@ -12,6 +12,15 @@
 <head>
 
 <style>
+
+body {
+    background-color: #EFE0B9;
+    color: #333333;
+	font-family: Arial, Helvetica, sans-serif;
+    font-size:14px;
+    word-wrap:break-word;
+}
+
 .crop {
   position:absolute;
   border:1px dashed white;
@@ -55,6 +64,48 @@
     height:20px;
     background-color: rgba(255,255,255,0);
     fill: rgba(255,255,255,0.3);
+}
+
+a { /*for all buttons*/
+	text-decoration:none;
+	background-image:none;
+	-moz-border-radius:5px;
+	-webkit-border-radius:5px;
+	border-radius:5px;
+	display:inline-block;
+	cursor:pointer;
+	font-size:16px;
+	font-weight:600;
+	background-color:#643B0F;	
+	color:#ffffff;
+	padding:12px 16px;	
+}
+
+a:active { /*effect on clicing a button*/
+	position:relative;
+	top:1px;
+}
+
+a.button-color-transparent { /*transparent button*/
+	background-color:transparent;
+	border:2px solid #ffffff;	
+	border-color:#ffffff;
+	color:#ffffff;
+}
+
+a:hover.button-color-transparent {/*transparent button effect on hovering*/
+	background-color:#ffffff;
+	color:#3a3c42;
+}
+
+a.button-cancel-color {/*cancel or back button color*/
+	background-color:#E4B04A;
+	color:#643B0F;
+}
+
+a.small-button {/*smaller button*/
+	font-size:12px;
+	padding:5px 10px;	
 }
 </style>
 
@@ -117,7 +168,7 @@ function showEditor() {
     crop.style["margin-left"] = cropDimensions.marginLeft.toString() + "px";
     cropDimensions.marginTop = ( canvas.height - cropDimensions.height ) / 2;
     crop.style["margin-top"] = cropDimensions.marginTop.toString() + "px";
-    reviewButton.style.position = "absolute";
+    reviewButton.style.position = "relative";
     reviewButton.style.top = (canvas.height + 10).toString() + "px";
 
     var tooltips = document.getElementsByClassName("tooltip");
@@ -505,7 +556,7 @@ window.addEventListener("DOMContentLoaded", function() {
 
 	<div id="methodpicker" style="display:inline-block;width:500px;margin:auto;">
 		<input type="file" onchange="handleLocalFile(this.files[0]);"></input>
-		<button id="photomatonBtn" onclick="showPhotomaton();">Take Picture</button>
+		<a id="photomatonBtn" onclick="showPhotomaton();">Take Picture</a>		
 	</div>
 	
 	<div id="photomaton" style="display:none;position:relative;">
@@ -513,8 +564,8 @@ window.addEventListener("DOMContentLoaded", function() {
 			<video id="video">
 		</div>
 		<div style="position:absolute;top:0px;left:0px;width:100%;">
-			<div style="display:none;position:relative;margin:auto;color:#FFF;text-align:center;font-size:20px;background-color:rgba(221,221,221,0.3);padding:10px 0;">
-				<button id="takePhotoBtn">Take Photo</button>
+			<div style="display:none;position:relative;margin:auto;color:#FFF;text-align:center;font-size:20px;padding:10px 0;">
+				<a id="takePhotoBtn" class="button-color-transparent">Take Photo</a>
 			</div>
 		</div>
 	</div>
@@ -540,7 +591,7 @@ window.addEventListener("DOMContentLoaded", function() {
                 </div>
 			</div>
 			
-        	<button id="reviewButton" onclick="showReviewer();">Review</button>
+        	<a id="reviewButton" onclick="showReviewer();">Review</a>
 		</div>
     </div>
 	
@@ -550,8 +601,8 @@ window.addEventListener("DOMContentLoaded", function() {
 		</div>
 		<div style="position:absolute;top:0px;left:0px;width:100%;">
 			<div id="reviewerButtons" style="position:absolute;width:100%;">
-				<a onclick="goBackToEditor();" style="float:left;">Back</a>
-				<a href="#" onclick="saveCroppedImage(this);" style="float:right;">Save</a>
+				<a onclick="goBackToEditor();" style="float:left;" class="button-cancel-color small-button">Back</a>
+				<a href="#" onclick="saveCroppedImage(this);" style="float:right;" class="small-button">Save</a>
 			</div>
 		</div>
 	</div>
