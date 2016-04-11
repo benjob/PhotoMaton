@@ -39,6 +39,33 @@ body {
   cursor: nw-resize !important;
 }
 
+.tooltip {
+    display: inline-block;
+}
+
+.tooltip .tooltiptext {
+    display:inline-block;
+    width: 120px;
+    background-color: rgba(255,255,255,0.3);
+    color: #FFFFFF;
+    text-align: center;
+    border-radius: 6px;
+
+    /* Position the tooltip */
+    position: relative;
+    z-index: 1;
+}
+
+.tooltip .tooltippointer {
+    float:left;
+    display:inline-block;
+    position: relative;
+    width:20px;
+    height:20px;
+    background-color: rgba(255,255,255,0);
+    fill: rgba(255,255,255,0.3);
+}
+
 a, .button { /*for all buttons*/
 	text-decoration:none;
 	background-image:none;
@@ -89,7 +116,6 @@ div.upload input {
     display: block;
     opacity: 0;
 }
-
 </style>
 
 <script type="text/javascript">
@@ -154,6 +180,23 @@ function showEditor() {
     reviewButton.style.position = "relative";
     reviewButton.style.top = (canvas.height + 10).toString() + "px";
 
+    var tooltips = document.getElementsByClassName("tooltip");
+
+    var removeTooltips = function( tooltip ) {
+    	setTimeout( function() {
+            tooltip.style.display="none";
+        }, 2000);
+    }
+    
+    for ( var i = 0; i < tooltips.length; i++) {
+        var tooltip = tooltips[i];
+        if ( tooltip.id == "dragtooltip" ) {
+            tooltip.style.top = cropDimensions.height / 2 + "px";
+        } 
+
+        removeTooltips(tooltip);
+    }
+    
     var previousPos,
         currentPos,
         isDragging = false,
@@ -252,19 +295,27 @@ function showEditor() {
                 //the closest corner is close to the X axis
                 //redraw at this position
                 var newWidth = xAxisValue;
-                crop.style["width"] = newWidth.toString() + "px";
+                var newHeight = (newWidth / cropDimensions.getAspectRatio());
                 
-                cropDimensions.height = (newWidth / cropDimensions.getAspectRatio());
-                cropDimensions.width = newWidth; 
-                crop.style["height"] = cropDimensions.height.toString() + "px";
+                if ( newHeight > 10 && newWidth > 10 && newHeight + cropDimensions.marginTop < canvas.height && newWidth + cropDimensions.marginLeft < canvas.width ) {
+                    crop.style["width"] = newWidth.toString() + "px";
+                    
+                    cropDimensions.height = newHeight;
+                    cropDimensions.width = newWidth; 
+                    crop.style["height"] = cropDimensions.height.toString() + "px";
+                }
             } else {
-                //the closest corner is close to the Y axis
+            	//the closest corner is close to the Y axis
                 var newHeight = yAxisValue;
-                crop.style["height"] = newHeight.toString() + "px";
+                var newWidth = (newHeight * cropDimensions.getAspectRatio());
                 
-                cropDimensions.width = (newHeight * cropDimensions.getAspectRatio()); 
-                cropDimensions.height = newHeight;
-                crop.style["width"] = cropDimensions.width.toString() + "px";
+                if ( newHeight > 10 && newWidth > 10 && newHeight + cropDimensions.marginTop < canvas.height && newWidth + cropDimensions.marginLeft < canvas.width ) {
+                    crop.style["height"] = newHeight.toString() + "px";
+                    
+                    cropDimensions.width = newWidth;
+                    cropDimensions.height = newHeight;
+                    crop.style["width"] = cropDimensions.width.toString() + "px";
+            	}
             }
         }
     }
@@ -487,8 +538,7 @@ function handleLocalFile( file ) {
 	reader.readAsDataURL(file);
 }
 
-//<![CDATA[
-// Put event listeners into place
+// Initialize everything on load
 window.addEventListener("DOMContentLoaded", function() {
 	methodpicker = document.getElementById("methodpicker");
 	photomaton = document.getElementById("photomaton");
@@ -534,11 +584,23 @@ window.addEventListener("DOMContentLoaded", function() {
 	
 	<div id="editor" style="display:none;position:relative;">
 		<div style="position:absolute;top:0px;left:0px;width:100%;">
-			<canvas id="canvas"></canvas>
+			<canvas id="canvas">
+                
+            </canvas>
 		</div>
 		<div style="position:absolute;top:0px;left:0px;width:100%;">
 			<div id="crop" draggable="true" class="crop" >
-				<div id="resize-handle" class="resize-handle" draggable="true"></div>
+                <span id="dragtooltip" class="tooltip" style="position:relative;">
+                    <span class="tooltiptext">Move Me</span>
+                </span>
+				<div id="resize-handle" class="resize-handle" draggable="true">
+                    <div class="tooltip" style="margin-top:10px;">
+                        <svg viewBox="0 0 50 50" class="tooltippointer">
+                            <polygon points="0,50 50,50 0,0"/>
+                        </svg>
+                        <span class="tooltiptext" style="border-radius:0px 6px 6px 6px;">Resize Me</span>
+                    </div>
+                </div>
 			</div>
 			
         	<a id="reviewButton" onclick="showReviewer();">Review</a>
