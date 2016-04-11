@@ -81,7 +81,7 @@ a, .button { /*for all buttons*/
 	padding:12px 16px;	
 }
 
-a:active { /*effect on clicing a button*/
+a:active, .button:active{ /*effect on clicing a button*/
 	position:relative;
 	top:1px;
 }
@@ -115,6 +115,7 @@ div.upload {
 div.upload input {
     display: block;
     opacity: 0;
+    cursor: pointer;    
 }
 </style>
 
@@ -185,7 +186,7 @@ function showEditor() {
     var removeTooltips = function( tooltip ) {
     	setTimeout( function() {
             tooltip.style.display="none";
-        }, 2000);
+        }, 3000);
     }
     
     for ( var i = 0; i < tooltips.length; i++) {
