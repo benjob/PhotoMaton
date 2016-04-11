@@ -33,6 +33,10 @@
 
 <script type="text/javascript">
 //<![CDATA[
+
+//this is the Maximum width we will show pictures with
+var MAX_WIDTH = 1024;           
+
 var videoObj = { 
 	audio: false,
 	video: true
@@ -361,10 +365,17 @@ function handleLocalFile( file ) {
 	    
 	    img.onload = function() {
 	    	var context = canvas.getContext("2d");
-	    	canvas.width = this.width;
-	    	canvas.height = this.height;
-	        
-	    	context.drawImage(this, 0, 0);
+	    	if ( this.width > MAX_WIDTH ) {
+	    		canvas.width = MAX_WIDTH;
+	    		canvas.height = MAX_WIDTH  / this.width * this.height;
+
+	    		context.drawImage(this,0,0,this.width,this.height,0,0,canvas.width,canvas.height);
+	    	} else {
+	    		canvas.width = this.width;
+	    		canvas.height = this.height;
+		        
+		    	context.drawImage(this, 0, 0);
+		    }
 	    	
 	    	showEditor();
 		};
@@ -427,8 +438,6 @@ window.addEventListener("DOMContentLoaded", function() {
 			
         	<button id="reviewButton" onclick="showReviewer();">Review</button>
 		</div>
-		
-		<svg id="dragImage"></svg>
     </div>
 	
 	<div id="reviewer" style="display:none;position:relative;">
@@ -442,6 +451,8 @@ window.addEventListener("DOMContentLoaded", function() {
 			</div>
 		</div>
 	</div>
+	
+	<svg id="dragImage" style="height:0px;width:0px;"></svg>
 </div>
 
 
