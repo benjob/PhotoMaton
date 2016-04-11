@@ -353,6 +353,47 @@ function showPhotomaton() {
 	}
 }
 
+function saveCroppedImage() {
+	var saveData = (function () {
+		if ( window.navigator.msSaveOrOpenBlob ) {
+			//To support older IEs.
+			return function (blob, fileName) {
+				window.navigator.msSaveOrOpenBlob(blob, fileName);
+			}
+		} else {
+			//To support everything else
+		    var a = document.createElement("a");
+		    a.style.display= "none";
+		    document.body.appendChild(a);
+		    return function (blob, fileName) {
+		    	if(window.navigator.msSaveOrOpenBlob) {
+			    	window.navigator.msSaveOrOpenBlob(blob, fileName);
+		        } else {
+		            var url = window.URL.createObjectURL(blob);
+			        a.href = url;
+			        a.download = fileName;
+			        a.click();
+			        setTimeout(function(){
+			            document.body.removeChild(a);
+			            window.URL.revokeObjectURL(url);  
+			        }, 100);
+		        }
+		    };
+		}
+	}());
+	
+	var dataURL = reviewCanvas.toDataURL("image/png");
+	var data = atob( dataURL.replace(/^.*?base64,/, '') );
+	asArray = new Uint8Array(data.length);
+	for( var i = 0, len = data.length; i < len; ++i ) {
+	    asArray[i] = data.charCodeAt(i);    
+	}
+    var blob = new Blob( [ asArray.buffer ], { type: "image/png" } );
+    saveData(blob, "image.png");
+    
+	return false;
+}
+
 function handleLocalFile( file ) {
 	// generate a new FileReader object
 	var reader = new FileReader();
@@ -446,8 +487,8 @@ window.addEventListener("DOMContentLoaded", function() {
 		</div>
 		<div style="position:absolute;top:0px;left:0px;width:100%;">
 			<div id="reviewerButtons" style="position:absolute;width:100%;">
-				<button onclick="goBackToEditor();" style="float:left;">Back</button>
-				<button onclick="" style="float:right;">Save</button>
+				<a onclick="goBackToEditor();" style="float:left;">Back</a>
+				<a href="#" onclick="saveCroppedImage(this);" style="float:right;">Save</a>
 			</div>
 		</div>
 	</div>
