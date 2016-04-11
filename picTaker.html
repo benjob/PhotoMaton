@@ -1,6 +1,4 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" 
-    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-
+<!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml"
 	xmlns:ui="http://xmlns.jcp.org/jsf/facelets"
 	xmlns:h="http://xmlns.jcp.org/jsf/html"
@@ -15,7 +13,7 @@
 
 <style>
 .crop {
-  position:relative;
+  position:absolute;
   border:1px dashed white;
   cursor:move !important;
 }
@@ -37,11 +35,15 @@
 //<![CDATA[
 var videoObj = { 
 	audio: false,
-	video: {
-		width: 640,
-		height: 480
-	}
+	video: true
 };
+
+//canvas dimensions are given by the source image
+var canvasDimensions = {
+	width: 0,
+	height: 0
+};
+
 var cropDimensions = {
 	width: 180,
 	height: 240,
@@ -66,23 +68,27 @@ var getCumulativeOffset = function(element) {
     };
 };
 
-var video, editor, canvas, photomaton, crop, resizeHandle, saveFileLink, saveFileFrame;
+var getUserMedia, methodpicker, photomaton, video, editor, canvas, crop, resizeHandle, dragImage, reviewButton, reviewer, reviewCanvas, reviewerButtons;
 
 function showEditor() {
-    editor.style.display = "block";
+	methodpicker.style.display = "none";
+	editor.style.display = "none";
+	photomaton.style.display = "none";
 
+	editor.style.width = canvas.width + "px";
+    editor.style.display = "inline-block";
+    
     //place the crop properly
     crop.setAttribute("style","width:" + cropDimensions.width.toString() + "px;height:" + cropDimensions.height.toString() + "px;");
     crop.style.width = cropDimensions.width.toString() + "px";
     crop.style.height = cropDimensions.height.toString() + "px";
-    cropDimensions.marginLeft = (( videoObj.video.width - cropDimensions.width ) / 2);
+    cropDimensions.marginLeft = (( canvas.width - cropDimensions.width ) / 2);
     crop.style["margin-left"] = cropDimensions.marginLeft.toString() + "px";
-    cropDimensions.marginTop = -1 * videoObj.video.height + (( videoObj.video.height - cropDimensions.height ) / 2);;
+    cropDimensions.marginTop = ( canvas.height - cropDimensions.height ) / 2;
     crop.style["margin-top"] = cropDimensions.marginTop.toString() + "px";
-    saveButton.style.position = "absolute";
-    saveButton.style.top = (videoObj.video.height + 10).toString() + "px";
-    saveButton.style["margin-left"] = (videoObj.video.width / 2).toString() + "px";
-    
+    reviewButton.style.position = "absolute";
+    reviewButton.style.top = (canvas.height + 10).toString() + "px";
+
     var previousPos,
         currentPos,
         isDragging = false,
@@ -96,19 +102,19 @@ function showEditor() {
             currentPos = [parseInt(event.clientX), parseInt(event.clientY)];
 
             var cropDimensionsMarginLeft = cropDimensions.marginLeft + (currentPos[0] - previousPos[0]);
-            if ( cropDimensionsMarginLeft > 0 && cropDimensionsMarginLeft + cropDimensions.width < videoObj.video.width ) {
+            if ( cropDimensionsMarginLeft >= 0 && cropDimensionsMarginLeft + cropDimensions.width < canvas.width ) {
                 cropDimensions.marginLeft = cropDimensionsMarginLeft;
                 crop.style["margin-left"] = cropDimensions.marginLeft.toString() + "px";
             }
             var cropDimensionsMarginTop = cropDimensions.marginTop + (currentPos[1] - previousPos[1]);
-            if ( cropDimensionsMarginTop > (-1 * videoObj.video.height) && (videoObj.video.height + cropDimensionsMarginTop) + cropDimensions.height < videoObj.video.height ) {
+            if ( cropDimensionsMarginTop >= 0 && cropDimensionsMarginTop + cropDimensions.height < canvas.height ) {
                 cropDimensions.marginTop = cropDimensionsMarginTop;
                 crop.style["margin-top"] = cropDimensions.marginTop.toString() + "px";
             }
         }
         return false;
     }
-    
+
     // Grab and move the crop
     crop.ondragstart = function ( event ) {
         if ( !isResizing ) {
@@ -119,13 +125,19 @@ function showEditor() {
             //next line is some Firefox crap where you need to set some data to be able to drag
             event.dataTransfer.setData('Text', "javascript:void(0);");
 
+            if ( event.dataTransfer.setDragImage ) {
+	            //to get rid of the dragImage, replace it with an empty SVG
+	            //note that the dragImage must be a visible node, that's why we add it to the DOM
+	            event.dataTransfer.setDragImage(dragImage,0,0);
+            }
+
             document.addEventListener("dragover", onCropDrag, true);
         }
     };
 
     crop.ondragend = function (event) {
         isDragging = false;
-
+        
         document.removeEventListener("dragover", onCropDrag, true);
         
         cropCumulativeOffset = getCumulativeOffset( crop )
@@ -198,10 +210,15 @@ function showEditor() {
             isResizing = true;
 
             //next line is some Firefox crap where you need to set some data to be able to drag
-            event.dataTransfer.setData('Text', "javascript:void(0);");
-            event.dataTransfer.setDragImage(null, 0, 0);
+            event.dataTransfer.setData("Text", "javascript:void(0);");
+
+            if ( event.dataTransfer.setDragImage ) {
+	            //to get rid of the dragImage, replace it with an empty SVG
+	            //note that the dragImage must be a visible node, that's why we add it to the DOM
+	            event.dataTransfer.setDragImage(dragImage,0,0);
+            }
             
-            document.addEventListener("dragover", onCropResize, true);
+			document.addEventListener("dragover", onCropResize, true);
         }
     };
 
@@ -225,62 +242,67 @@ function showEditor() {
     };
 }
 
-function hideEditor() {
-    editor.style.display = "none";
+//This is called in the reviewer to go back and crop differently
+function goBackToEditor() {
+	methodpicker.style.display = "none";
+	photomaton.style.display = "none";
+	reviewer.style.display = "none";
+	editor.style.display = "inline-block";
 }
 
-function exportToFile( canvas ) {
-    /* if (navigator.appName == "Microsoft Internet Explorer") {
-        saveFileFrame.document.open("text/html", "replace");
-        saveFileFrame.document.write(data);
-        saveFileFrame.document.close();
-        saveFileFrame.focus()
-        saveFileFrame.document.execCommand('SaveAs', true, 'data.xls');
-    } else {
-        //Others
-        saveFileLink.setAttribute("href", data);
-        saveFileLink.setAttribute("target", "_blank");
-        saveFileLink.click();
-    }
-     */
-    var image = canvas.toDataURL("image/png");
-    saveFileLink.href = image;
-    saveFileLink.click();
-}
-
-function savePicture() {
-    var image = canvas.toDataURL();
+function showReviewer() {
+	methodpicker.style.display = "none";
+	photomaton.style.display = "none";
+	editor.style.display = "none";
+	
+	var image = canvas.toDataURL();
     var img = new Image();
     img.src = image;
-    var context = canvas.getContext("2d");
-    canvas.width = cropDimensions.width;
-    canvas.height = cropDimensions.height;
+    var context = reviewCanvas.getContext("2d");
     img.onload = function() {
-    	context.drawImage(img, cropDimensions.marginLeft, cropDimensions.marginTop + videoObj.video.height, cropDimensions.width, cropDimensions.height, 0, 0, cropDimensions.width, cropDimensions.height);
+    	reviewCanvas.width = cropDimensions.width;
+    	reviewCanvas.height = cropDimensions.height;
+        
+    	context.drawImage(img, cropDimensions.marginLeft, cropDimensions.marginTop, cropDimensions.width, cropDimensions.height, 0, 0, cropDimensions.width, cropDimensions.height);
+    	
+    	reviewer.style.width = cropDimensions.width + "px";
+    	reviewer.style.display = "inline-block";
+
+    	reviewerButtons.style.top = (reviewCanvas.height + 10).toString() + "px";
 	};
-    exportToFile(canvas);
-	//hideEditor();
 }
 
-//<![CDATA[
-// Put event listeners into place
-window.addEventListener("DOMContentLoaded", function() {
-	video = document.getElementById("video");
-	editor = document.getElementById("editor");
-	canvas = document.getElementById("canvas");
-	photomaton = document.getElementById("photomaton");
-	crop = document.getElementById("crop");
-	saveFileLink = document.getElementById("saveFileLink");
-    saveFileFrame = document.getElementById("saveFileFrame");
-
-    resizeHandle = document.createElement('div');
-	resizeHandle.setAttribute("class", "resize-handle");
-	resizeHandle.setAttribute("draggable", "true");
-	crop.appendChild(resizeHandle);
+function showPhotomaton() {
+	methodpicker.style.display = "none";
+	photomaton.style.display = "inline-block";
+	reviewer.style.display = "none";
+	
+	function startVideoAndAdjustUI() {
+		//Trigger photo take
+		photomaton.style.width = (video.videoWidth).toString() + "px";
+		var takePhotoBtn = document.getElementById("takePhotoBtn");
+		takePhotoBtn.parentNode.style.top = (video.videoHeight * 0.8).toString() + "px"; 
+		takePhotoBtn.parentNode.style.width = (video.videoWidth).toString() + "px";
+		takePhotoBtn.parentNode.style.display = "inline-block";
+		takePhotoBtn.addEventListener("click", function() {
+			var context = canvas.getContext("2d");
+			canvas.width = video.videoWidth;
+			canvas.height = video.videoHeight;
+			
+	        context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+	
+	        //Stop the video
+	        track.stop();
+	        
+	        //Switch the video and the canvas
+	        photomaton.style.display = "none";
+	
+	        showEditor();
+		});
+	}
 	
 	// Grab elements, create settings, etc.
-	var userMediaSupported = true,
-		errBack = function(error) {
+	var errBack = function(error) {
 			console.log("Video capture error: ", error.code); 
 		},
 		track;
@@ -290,77 +312,135 @@ window.addEventListener("DOMContentLoaded", function() {
 		navigator.getUserMedia(videoObj, function(stream) {
 			//only 1 media stream
 			track = stream.getTracks()[0];
-			video.src = stream;
+
+			video.addEventListener('loadedmetadata', function() {
+				startVideoAndAdjustUI();
+			}, false);
+			
+			if (typeof (video.srcObject) !== 'undefined') {
+		        video.srcObject = stream;
+		    } else {
+		        video.src = URL.createObjectURL(stream);
+		    }		
 			video.play();
 		}, errBack);
 	} else if(navigator.webkitGetUserMedia) { // WebKit-prefixed
 		navigator.webkitGetUserMedia(videoObj, function(stream){
 			track = stream.getTracks()[0];
+
+			video.addEventListener('loadedmetadata', function() {
+				startVideoAndAdjustUI();
+			}, false);
+			
 			video.src = window.webkitURL.createObjectURL(stream);
 			video.play();
 		}, errBack);
 	} else if(navigator.mozGetUserMedia) { // Firefox-prefixed
 		navigator.mozGetUserMedia(videoObj, function(stream){
 			track = stream.getTracks()[0];
+
+			video.addEventListener('loadedmetadata', function() {
+				startVideoAndAdjustUI();
+			}, false);
+			
 			video.src = window.URL.createObjectURL(stream);
 			video.play();
 		}, errBack);
-	} else {
-		userMediaSupported = false;
-		return;
 	}
+}
 
-	//Trigger photo take
-	document.getElementById("takePhotoBtn").addEventListener("click", function() {
-		var context = canvas.getContext("2d");
-        context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+function handleLocalFile( file ) {
+	// generate a new FileReader object
+	var reader = new FileReader();
 
-        //Stop the video
-        track.stop();
-        
-        //Switch the video and the canvas
-        photomaton.style.display = "none";
+	// inject an image with the src url
+	reader.onload = function(event) {
+		var image = event.target.result;
+	    var img = new Image();
+	    img.src = image;
+	    
+	    img.onload = function() {
+	    	var context = canvas.getContext("2d");
+	    	canvas.width = this.width;
+	    	canvas.height = this.height;
+	        
+	    	context.drawImage(this, 0, 0);
+	    	
+	    	showEditor();
+		};
+	}
+	 
+	// when the file is read it triggers the onload event above.
+	reader.readAsDataURL(file);
+}
 
-        showEditor();
-	});
+//<![CDATA[
+// Put event listeners into place
+window.addEventListener("DOMContentLoaded", function() {
+	methodpicker = document.getElementById("methodpicker");
+	photomaton = document.getElementById("photomaton");
+	video = document.getElementById("video");
+	editor = document.getElementById("editor");
+	canvas = document.getElementById("canvas");
+	crop = document.getElementById("crop");
+	resizeHandle = document.getElementById("resize-handle");
+	dragImage = document.getElementById("dragImage");
+	reviewButton = document.getElementById("reviewButton");
+	reviewer = document.getElementById("reviewer");
+	reviewCanvas = document.getElementById("reviewCanvas"),
+	reviewerButtons = document.getElementById("reviewerButtons");
+
+	if( !(navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia) ) {
+		document.getElementById("photomatonBtn").style.display = "none";
+	}
 }, false);
 //]]>
 </script>
 </head>
 
-<!-- 
-	TODO: handle different camera resolutions. Here everything is hardcoded to 640x480
- -->
-<div id="photoeditor" style="width:640px;height:480px;margin:auto;">
+<div id="photoeditor" style="display:block;text-align:center;width:100%;">
+
+	<div id="methodpicker" style="display:inline-block;width:500px;margin:auto;">
+		<input type="file" onchange="handleLocalFile(this.files[0]);"></input>
+		<button id="photomatonBtn" onclick="showPhotomaton();">Take Picture</button>
+	</div>
 	
-	<div id="photomaton">
-		<div>
-			<video id="video" width="640" height="480"></video>
+	<div id="photomaton" style="display:none;position:relative;">
+		<div style="position:absolute;top:0px;left:0px;width:100%;">
+			<video id="video">
 		</div>
-		<div style="position:absolute;top:400px;color:#FFF;text-align:center;font-size:20px;background-color: rgba(221, 221, 221, 0.3);width: 640px;padding: 10px 0;z-index: 2147483647;">
-			<button id="takePhotoBtn">Take Photo</button>
+		<div style="position:absolute;top:0px;left:0px;width:100%;">
+			<div style="display:none;position:relative;margin:auto;color:#FFF;text-align:center;font-size:20px;background-color:rgba(221,221,221,0.3);padding:10px 0;">
+				<button id="takePhotoBtn">Take Photo</button>
+			</div>
 		</div>
 	</div>
 	
-	<div id="editor" style="display:none;">
-		<div>
-			<div style="position:relative;">
-				<canvas id="canvas" width="640" height="480"/>
+	<div id="editor" style="display:none;position:relative;">
+		<div style="position:absolute;top:0px;left:0px;width:100%;">
+			<canvas id="canvas"></canvas>
+		</div>
+		<div style="position:absolute;top:0px;left:0px;width:100%;">
+			<div id="crop" draggable="true" class="crop" >
+				<div id="resize-handle" class="resize-handle" draggable="true"></div>
 			</div>
-			<!-- 
-				TODO: position and size of crop hardcoded here
-				Position the cropper always in the middle of the picture:
-					to compute margin-left:
-						( (640) Camera resolution - (360) crop size ) / 2 - 10
-					to compute margin-top:
-						-1 * Camera resolution - 10
-			 -->
-			<div id="crop" draggable="true" class="crop">
+			
+        	<button id="reviewButton" onclick="showReviewer();">Review</button>
+		</div>
+		
+		<svg id="dragImage"></svg>
+    </div>
+	
+	<div id="reviewer" style="display:none;position:relative;">
+		<div style="position:absolute;top:0px;left:0px;width:100%;">
+			<canvas id="reviewCanvas"></canvas>
+		</div>
+		<div style="position:absolute;top:0px;left:0px;width:100%;">
+			<div id="reviewerButtons" style="position:absolute;width:100%;">
+				<button onclick="goBackToEditor();" style="float:left;">Back</button>
+				<button onclick="" style="float:right;">Save</button>
 			</div>
 		</div>
-        <button id="saveButton" onclick="savePicture();">Save</button>
-        <a id="saveFileLink" href="javascript:void(0);" download="image.png" target="_blank" style="display:none;"></a>
-        <iframe id="saveFileFrame" style="display:none;"></iframe>
 	</div>
 </div>
 
