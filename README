@@ -1,0 +1,12 @@
+The quickest way to take a profile pic on your laptop and crop it!
+Just open picTaker.html in your favorite browser (except Safari!)
+
+That's it!
+
+For power users, you can change the crop dimensions around line 140
+
+var cropDimensions = {
+	width: 180,
+	height: 240,
+....
+};
