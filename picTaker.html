@@ -1,8 +1,5 @@
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml"
-	xmlns:ui="http://xmlns.jcp.org/jsf/facelets"
-	xmlns:h="http://xmlns.jcp.org/jsf/html"
-	xmlns:f="http://xmlns.jcp.org/jsf/core">
+<html xmlns="http://www.w3.org/1999/xhtml">
 
 <!--
 	Ideally these elements aren't created until it's confirmed that the 
@@ -16,9 +13,16 @@
 body {
     background-color: #EFE0B9;
     color: #333333;
-	font-family: Arial, Helvetica, sans-serif;
+    font-family: Arial, Helvetica, sans-serif;
     font-size:14px;
     word-wrap:break-word;
+}
+
+[draggable=true] {
+    -khtml-user-drag: element;
+    -webkit-user-drag: element;
+    -khtml-user-select: none;
+    -webkit-user-select: none;
 }
 
 .crop {
@@ -88,7 +92,6 @@ a:active, .button:active{ /*effect on clicing a button*/
 
 a.button-color-transparent { /*transparent button*/
 	background-color:transparent;
-	border:2px solid #ffffff;	
 	border-color:#ffffff;
 	color:#ffffff;
 }
@@ -137,9 +140,9 @@ var canvasDimensions = {
 };
 
 var cropDimensions = {
-	width: 180,
-	height: 240,
-	marginTop: 0,
+    width: 180,
+    height: 240,
+    marginTop: 0,
     marginLeft: 0,
     getAspectRatio: function() {
         return cropDimensions.width / cropDimensions.height;
@@ -160,7 +163,93 @@ var getCumulativeOffset = function(element) {
     };
 };
 
-var getUserMedia, methodpicker, photomaton, video, editor, canvas, crop, resizeHandle, dragImage, reviewButton, reviewer, reviewCanvas, reviewerButtons;
+//Global variables
+var methodpicker, photomaton, video, editor, canvas, crop, resizeHandle, dragImage, reviewButton, reviewer, reviewCanvas, reviewerButtons;
+
+//Setup the dragging over the document.
+var previousPos = [0, 0],
+    currentPos = [0, 0],
+    isDragging = false,
+    isResizing = false,
+    cropCumulativeOffset;
+
+var onDrag = function (event) {
+    if ( isDragging && !isResizing ) {
+        //this is a drag
+        previousPos = currentPos;
+        currentPos = [parseInt(event.clientX), parseInt(event.clientY)];
+
+        var cropDimensionsMarginLeft = cropDimensions.marginLeft + (currentPos[0] - previousPos[0]);
+        if ( cropDimensionsMarginLeft >= 0 && cropDimensionsMarginLeft + cropDimensions.width < canvas.width ) {
+            cropDimensions.marginLeft = cropDimensionsMarginLeft;
+            crop.style.marginLeft = cropDimensions.marginLeft.toString() + "px";
+        }
+        var cropDimensionsMarginTop = cropDimensions.marginTop + (currentPos[1] - previousPos[1]);
+        if ( cropDimensionsMarginTop >= 0 && cropDimensionsMarginTop + cropDimensions.height < canvas.height ) {
+            cropDimensions.marginTop = cropDimensionsMarginTop;
+            crop.style.marginTop = cropDimensions.marginTop.toString() + "px";
+        }
+    } else if ( !isDragging && isResizing ) {
+        cropCumulativeOffset = getCumulativeOffset( crop );
+        //This is a resize
+        var mouseX = parseInt(event.clientX);
+        var mouseY = parseInt(event.clientY);
+
+        var newWidth = 0;
+        var newHeight = 0;
+
+        var xAxisValue = 0;
+        var yAxisValue = 0;
+        //compute the corner for this mouseX value
+        var mouseXRelativeToCrop = (mouseX - cropCumulativeOffset.left);
+        var mouseYRelativeToCrop = mouseY - (cropCumulativeOffset.top - window.pageYOffset);
+        if ( mouseXRelativeToCrop <= 0 ) {
+            //The mouse is to the left of the top left corner
+            //for now do nothing.
+            //TODO: do something.
+        } else {
+            //X coordinate of the corner when Y = mouseY
+            xAxisValue = mouseYRelativeToCrop * cropDimensions.getAspectRatio();
+        }
+
+        if ( mouseYRelativeToCrop <= 0 ) {
+            //The mouse is over the top left corner
+            //for now do nothing.
+            //TODO: do something.
+        } else {
+            //Y coordinate of the corner when X = mouseX
+            yAxisValue = mouseXRelativeToCrop / cropDimensions.getAspectRatio();
+        }
+
+        if ( Math.abs( xAxisValue - mouseXRelativeToCrop ) <  Math.abs( yAxisValue - mouseYRelativeToCrop ) ) {
+            //the closest corner is close to the X axis
+            //redraw at this position
+            var newWidth = xAxisValue;
+            var newHeight = (newWidth / cropDimensions.getAspectRatio());
+            
+            if ( newHeight > 10 && newWidth > 10 && newHeight + cropDimensions.marginTop < canvas.height && newWidth + cropDimensions.marginLeft < canvas.width ) {
+                crop.style["width"] = newWidth.toString() + "px";
+                
+                cropDimensions.height = newHeight;
+                cropDimensions.width = newWidth; 
+                crop.style["height"] = cropDimensions.height.toString() + "px";
+            }
+        } else {
+            //the closest corner is close to the Y axis
+            var newHeight = yAxisValue;
+            var newWidth = (newHeight * cropDimensions.getAspectRatio());
+            
+            if ( newHeight > 10 && newWidth > 10 && newHeight + cropDimensions.marginTop < canvas.height && newWidth + cropDimensions.marginLeft < canvas.width ) {
+                crop.style["height"] = newHeight.toString() + "px";
+                
+                cropDimensions.width = newWidth;
+                cropDimensions.height = newHeight;
+                crop.style["width"] = cropDimensions.width.toString() + "px";
+            }
+        }
+    }
+    return false;
+}
 
 function showEditor() {
 	methodpicker.style.display = "none";
@@ -171,13 +260,12 @@ function showEditor() {
     editor.style.display = "inline-block";
     
     //place the crop properly
-    crop.setAttribute("style","width:" + cropDimensions.width.toString() + "px;height:" + cropDimensions.height.toString() + "px;");
     crop.style.width = cropDimensions.width.toString() + "px";
     crop.style.height = cropDimensions.height.toString() + "px";
     cropDimensions.marginLeft = (( canvas.width - cropDimensions.width ) / 2);
-    crop.style["margin-left"] = cropDimensions.marginLeft.toString() + "px";
+    crop.style.marginLeft = cropDimensions.marginLeft.toString() + "px";
     cropDimensions.marginTop = ( canvas.height - cropDimensions.height ) / 2;
-    crop.style["margin-top"] = cropDimensions.marginTop.toString() + "px";
+    crop.style.marginTop = cropDimensions.marginTop.toString() + "px";
     reviewButton.style.position = "relative";
     reviewButton.style.top = (canvas.height + 10).toString() + "px";
 
@@ -197,167 +285,36 @@ function showEditor() {
 
         removeTooltips(tooltip);
     }
-    
-    var previousPos,
-        currentPos,
-        isDragging = false,
-        isResizing = false,
-        cropCumulativeOffset = getCumulativeOffset( crop );
-
-    var onCropDrag = function (event) {
-    	event.preventDefault();
-        if ( isDragging && !isResizing ) {
-            previousPos = currentPos;
-            currentPos = [parseInt(event.clientX), parseInt(event.clientY)];
-
-            var cropDimensionsMarginLeft = cropDimensions.marginLeft + (currentPos[0] - previousPos[0]);
-            if ( cropDimensionsMarginLeft >= 0 && cropDimensionsMarginLeft + cropDimensions.width < canvas.width ) {
-                cropDimensions.marginLeft = cropDimensionsMarginLeft;
-                crop.style["margin-left"] = cropDimensions.marginLeft.toString() + "px";
-            }
-            var cropDimensionsMarginTop = cropDimensions.marginTop + (currentPos[1] - previousPos[1]);
-            if ( cropDimensionsMarginTop >= 0 && cropDimensionsMarginTop + cropDimensions.height < canvas.height ) {
-                cropDimensions.marginTop = cropDimensionsMarginTop;
-                crop.style["margin-top"] = cropDimensions.marginTop.toString() + "px";
-            }
-        }
-        return false;
-    }
-
-    // Grab and move the crop
-    crop.ondragstart = function ( event ) {
-        if ( !isResizing ) {
-            isDragging = true;
-            
-            previousPos = [parseInt(event.clientX), parseInt(event.clientY)];
-            currentPos = [parseInt(event.clientX), parseInt(event.clientY)];
-            //next line is some Firefox crap where you need to set some data to be able to drag
-            event.dataTransfer.setData('Text', "javascript:void(0);");
-
-            if ( event.dataTransfer.setDragImage ) {
-	            //to get rid of the dragImage, replace it with an empty SVG
-	            //note that the dragImage must be a visible node, that's why we add it to the DOM
-	            event.dataTransfer.setDragImage(dragImage,0,0);
-            }
-
-            document.addEventListener("dragover", onCropDrag, true);
-        }
-    };
-
-    crop.ondragend = function (event) {
-        isDragging = false;
-        
-        document.removeEventListener("dragover", onCropDrag, true);
-        
-        cropCumulativeOffset = getCumulativeOffset( crop )
-    };
-
-    crop.ondrop = function (event) {
-    	event.preventDefault();
-        if ( event.stopPropagation ) {
-            event.stopPropagation();
-        }
-        return false;
-    }
-
-    var onCropResize = function (event) {
-        event.preventDefault();
-        if ( isResizing && !isDragging ) {
-            var mouseX = parseInt(event.clientX);
-            var mouseY = parseInt(event.clientY);
-
-            var newWidth = 0;
-            var newHeight = 0;
-
-            var xAxisValue = 0;
-            var yAxisValue = 0;
-            //compute the corner for this mouseX value
-            var mouseXRelativeToCrop = (mouseX - cropCumulativeOffset.left);
-            var mouseYRelativeToCrop = mouseY - (cropCumulativeOffset.top - window.pageYOffset);
-            if ( mouseXRelativeToCrop <= 0 ) {
-                //The mouse is to the left of the top left corner
-                //for now do nothing.
-                //TODO: do something.
-            } else {
-                //X coordinate of the corner when Y = mouseY
-                xAxisValue = mouseYRelativeToCrop * cropDimensions.getAspectRatio();
-            }
-
-            if ( mouseYRelativeToCrop <= 0 ) {
-                //The mouse is over the top left corner
-                //for now do nothing.
-                //TODO: do something.
-            } else {
-                //Y coordinate of the corner when X = mouseX
-                yAxisValue = mouseXRelativeToCrop / cropDimensions.getAspectRatio();
-            }
-
-            if ( Math.abs( xAxisValue - mouseXRelativeToCrop ) <  Math.abs( yAxisValue - mouseYRelativeToCrop ) ) {
-                //the closest corner is close to the X axis
-                //redraw at this position
-                var newWidth = xAxisValue;
-                var newHeight = (newWidth / cropDimensions.getAspectRatio());
-                
-                if ( newHeight > 10 && newWidth > 10 && newHeight + cropDimensions.marginTop < canvas.height && newWidth + cropDimensions.marginLeft < canvas.width ) {
-                    crop.style["width"] = newWidth.toString() + "px";
-                    
-                    cropDimensions.height = newHeight;
-                    cropDimensions.width = newWidth; 
-                    crop.style["height"] = cropDimensions.height.toString() + "px";
-                }
-            } else {
-            	//the closest corner is close to the Y axis
-                var newHeight = yAxisValue;
-                var newWidth = (newHeight * cropDimensions.getAspectRatio());
-                
-                if ( newHeight > 10 && newWidth > 10 && newHeight + cropDimensions.marginTop < canvas.height && newWidth + cropDimensions.marginLeft < canvas.width ) {
-                    crop.style["height"] = newHeight.toString() + "px";
-                    
-                    cropDimensions.width = newWidth;
-                    cropDimensions.height = newHeight;
-                    crop.style["width"] = cropDimensions.width.toString() + "px";
-            	}
-            }
-        }
-    }
-
-    //Resize the crop
-    resizeHandle.ondragstart = function (event) {
-        if ( !isDragging ) {
-            isResizing = true;
-
-            //next line is some Firefox crap where you need to set some data to be able to drag
-            event.dataTransfer.setData("Text", "javascript:void(0);");
-
-            if ( event.dataTransfer.setDragImage ) {
-	            //to get rid of the dragImage, replace it with an empty SVG
-	            //note that the dragImage must be a visible node, that's why we add it to the DOM
-	            event.dataTransfer.setDragImage(dragImage,0,0);
-            }
-            
-			document.addEventListener("dragover", onCropResize, true);
-        }
-    };
-
-    resizeHandle.ondragend = function (event) {
-        event.preventDefault();
-        isResizing = false;
-        
-        document.removeEventListener("dragover", onCropResize, true);
-    };
-
-    resizeHandle.ondragleave = function (event) {
-        event.preventDefault();
-    };
-
-    resizeHandle.ondragexit = function (event) {
-        event.preventDefault();
-    };
-
-    resizeHandle.ondrop = function (event) {
-        event.preventDefault();
-    };
 }
+
+//Grab and move the crop
+var onDragStart = function (event) {
+    console.log("dragstart");
+    if ( event.target == crop ) {
+        isDragging = true;
+        isResizing = false;
+    } else if ( event.target == resizeHandle ) {
+        isDragging = false;
+        isResizing = true;
+    }
+     
+    previousPos = [parseInt(event.clientX), parseInt(event.clientY)];
+    currentPos = [parseInt(event.clientX), parseInt(event.clientY)];
+    //next line is some Firefox crap where you need to set some data to be able to drag
+    if ( event.dataTransfer.setData ) {
+        event.dataTransfer.setData("text", this.id);
+    }
+
+    if ( event.dataTransfer.setDragImage ) {
+        //to get rid of the dragImage, replace it with an empty SVG
+        //note that the dragImage must be a visible node, that's why we add it to the DOM
+        event.dataTransfer.setDragImage(dragImage,0,0);
+    }
+};
+
+var onDragEnd = function () {
+    cropCumulativeOffset = getCumulativeOffset( crop );
+};
 
 //This is called in the reviewer to go back and crop differently
 function goBackToEditor() {
@@ -394,44 +351,50 @@ function showPhotomaton() {
 	photomaton.style.display = "inline-block";
 	reviewer.style.display = "none";
 	
-	function startVideoAndAdjustUI() {
-		//Trigger photo take
-		photomaton.style.width = (video.videoWidth).toString() + "px";
-		var takePhotoBtn = document.getElementById("takePhotoBtn");
-		takePhotoBtn.parentNode.style.top = (video.videoHeight * 0.8).toString() + "px"; 
-		takePhotoBtn.parentNode.style.width = (video.videoWidth).toString() + "px";
-		takePhotoBtn.parentNode.style.display = "inline-block";
-		takePhotoBtn.addEventListener("click", function() {
-			var context = canvas.getContext("2d");
-			canvas.width = video.videoWidth;
-			canvas.height = video.videoHeight;
-			
-	        context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
-	
-	        //Stop the video
-	        track.stop();
-	        
-	        //Switch the video and the canvas
-	        photomaton.style.display = "none";
-	
-	        showEditor();
-		});
-	}
-	
 	// Grab elements, create settings, etc.
 	var errBack = function(error) {
 			console.log("Video capture error: ", error.code); 
 		},
 		track;
 
-	// Put video listeners into place
-	if(navigator.getUserMedia) { // Standard
-		navigator.getUserMedia(videoObj, function(stream) {
-			//only 1 media stream
-			track = stream.getTracks()[0];
+	function adjustUIForVideo() {
+        //Trigger photo take
+        photomaton.style.width = (video.videoWidth).toString() + "px";
+        var takePhotoBtn = document.getElementById("takePhotoBtn");
+        takePhotoBtn.parentNode.style.top = (video.videoHeight * 0.8).toString() + "px";
+        takePhotoBtn.parentNode.style.width = (video.videoWidth).toString() + "px";
+        takePhotoBtn.parentNode.style.display = "inline-block";
+        takePhotoBtn.addEventListener("click", function() {
+            var context = canvas.getContext("2d");
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+
+            //Stop the video
+		    if ( track != null ) {
+                track.stop();
+		    } else {
+		        video.pause();
+		    }
+
+            //Switch the video and the canvas
+            photomaton.style.display = "none";
+
+            showEditor();
+        });
+    }
+
+    // Put video listeners into place
+    if(navigator.getUserMedia) { // Standard
+        navigator.getUserMedia(videoObj, function(stream) {
+            //only 1 media stream
+            if ( stream.getTracks ) {
+                track = stream.getTracks()[0];
+            }
 
 			video.addEventListener('loadedmetadata', function() {
-				startVideoAndAdjustUI();
+				adjustUIForVideo();
 			}, false);
 			
 			if (typeof (video.srcObject) !== 'undefined') {
@@ -442,11 +405,14 @@ function showPhotomaton() {
 			video.play();
 		}, errBack);
 	} else if(navigator.webkitGetUserMedia) { // WebKit-prefixed
-		navigator.webkitGetUserMedia(videoObj, function(stream){
-			track = stream.getTracks()[0];
+        navigator.webkitGetUserMedia(videoObj, function(stream){
+            //only 1 media stream
+            if ( stream.getTracks ) {
+                track = stream.getTracks()[0];
+            }
 
 			video.addEventListener('loadedmetadata', function() {
-				startVideoAndAdjustUI();
+				adjustUIForVideo();
 			}, false);
 			
 			video.src = window.webkitURL.createObjectURL(stream);
@@ -454,10 +420,13 @@ function showPhotomaton() {
 		}, errBack);
 	} else if(navigator.mozGetUserMedia) { // Firefox-prefixed
 		navigator.mozGetUserMedia(videoObj, function(stream){
-			track = stream.getTracks()[0];
+            //only 1 media stream
+            if ( stream.getTracks ) {
+                track = stream.getTracks()[0];
+            }
 
 			video.addEventListener('loadedmetadata', function() {
-				startVideoAndAdjustUI();
+				adjustUIForVideo();
 			}, false);
 			
 			video.src = window.URL.createObjectURL(stream);
@@ -554,10 +523,34 @@ window.addEventListener("DOMContentLoaded", function() {
 	reviewCanvas = document.getElementById("reviewCanvas"),
 	reviewerButtons = document.getElementById("reviewerButtons");
 
+    //on safari, if I set a dragstart, then the dragover events do not get fired.
+    //this is sad because it is the only way to set the ghost image...
+    document.addEventListener("dragstart", onDragStart);
+    document.addEventListener("dragstart", onDragStart);
+
+    document.addEventListener("dragend", onDragEnd);
+    document.addEventListener("dragend", onDragEnd);
+
 	if( !(navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia) ) {
 		document.getElementById("photomatonBtn").style.display = "none";
 	}
-}, false);
+
+    //start the drag listeners
+	document.addEventListener("dragover", function (event) {
+		console.log("dragover");
+        event.preventDefault();
+		onDrag( event );
+	});
+    document.addEventListener("drop", function(event) {
+        event.preventDefault();
+        if ( event.target == crop ) {
+            isDragging = false;
+        } else if ( event.target == resizeHandle ) {
+            isResizing = false;
+        }
+        return false;
+    });
+});
 //]]>
 </script>
 </head>
@@ -585,16 +578,14 @@ window.addEventListener("DOMContentLoaded", function() {
 	
 	<div id="editor" style="display:none;position:relative;">
 		<div style="position:absolute;top:0px;left:0px;width:100%;">
-			<canvas id="canvas">
-                
-            </canvas>
+			<canvas id="canvas"></canvas>
 		</div>
 		<div style="position:absolute;top:0px;left:0px;width:100%;">
-			<div id="crop" draggable="true" class="crop" >
+		    <div id="crop" draggable="true" class="crop"> 
                 <span id="dragtooltip" class="tooltip" style="position:relative;">
                     <span class="tooltiptext">Move Me</span>
                 </span>
-				<div id="resize-handle" class="resize-handle" draggable="true">
+                <div id="resize-handle" class="resize-handle" draggable="true">
                     <div class="tooltip" style="margin-top:10px;">
                         <svg viewBox="0 0 50 50" class="tooltippointer">
                             <polygon points="0,50 50,50 0,0"/>
@@ -602,9 +593,9 @@ window.addEventListener("DOMContentLoaded", function() {
                         <span class="tooltiptext" style="border-radius:0px 6px 6px 6px;">Resize Me</span>
                     </div>
                 </div>
-			</div>
+            </div>
 			
-        	<a id="reviewButton" onclick="showReviewer();">Review</a>
+        	<a id="reviewButton" draggable="true" onclick="showReviewer();">Review</a>
 		</div>
     </div>
 	
@@ -620,7 +611,7 @@ window.addEventListener("DOMContentLoaded", function() {
 		</div>
 	</div>
 	
-	<svg id="dragImage" style="height:0px;width:0px;"></svg>
+	<svg id="dragImage" style="height:1px;width:1px;" viewBox="0 0 10 10"></svg>
 </div>
 
 
