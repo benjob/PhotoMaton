@@ -386,25 +386,7 @@ function showPhotomaton() {
     }
 
     // Put video listeners into place
-    if(navigator.mediaDevices.getUserMedia) {
-        navigator.mediaDevices.getUserMedia(videoObj).then(function(stream){
-            //only 1 media stream
-            if ( stream.getTracks ) {
-                track = stream.getTracks()[0];
-            }
-
-            video.addEventListener('loadedmetadata', function() {
-                adjustUIForVideo();
-            }, false);
-
-            if (typeof (video.srcObject) !== 'undefined') {
-                video.srcObject = stream;
-            } else {
-                video.src = URL.createObjectURL(stream);
-            }
-            video.play();
-        }, errBack);
-    } else if(navigator.getUserMedia) {
+    if(navigator.getUserMedia) {
         navigator.getUserMedia(videoObj, function(stream) {
             //only 1 media stream
             if ( stream.getTracks ) {
@@ -422,6 +404,24 @@ function showPhotomaton() {
             }		
             video.play();
 	}, errBack);
+    } else if(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia(videoObj).then(function(stream){
+            //only 1 media stream
+            if ( stream.getTracks ) {
+                track = stream.getTracks()[0];
+            }
+
+            video.addEventListener('loadedmetadata', function() {
+                adjustUIForVideo();
+            }, false);
+
+            if (typeof (video.srcObject) !== 'undefined') {
+                video.srcObject = stream;
+            } else {
+                video.src = URL.createObjectURL(stream);
+            }
+            video.play();
+        }, errBack);
     } else if(navigator.webkitGetUserMedia) { // WebKit-prefixed
         navigator.webkitGetUserMedia(videoObj, function(stream){
             //only 1 media stream
@@ -535,7 +535,7 @@ window.addEventListener("DOMContentLoaded", function() {
     document.addEventListener("dragend", onDragEnd);
     document.addEventListener("dragend", onDragEnd);
 
-	if( !(navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia) ) {
+	if( !(navigator.getUserMedia || (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) || navigator.webkitGetUserMedia || navigator.mozGetUserMedia) ) {
 		document.getElementById("photomatonBtn").style.display = "none";
 	}
 
@@ -563,7 +563,7 @@ window.addEventListener("DOMContentLoaded", function() {
 
 	<div id="methodpicker" style="display:inline-block;width:500px;margin:auto;">
 		<div id="upload" class="button upload" style="position:relative;">Choose a file...
-			<input type="file" onchange="handleLocalFile(this.files[0]);" style="position:absolute;top:0px;left:0px;height:100%;width:100%;"></input>
+			<input type="file" onchange="handleLocalFile(this.files[0]);" style="position:absolute;top:0px;left:0px;height:100%;width:100%;"/>
 		</div>
 
 		<a id="photomatonBtn" onclick="showPhotomaton();" style="vertical-align:top;">Take Picture</a>		
@@ -571,7 +571,7 @@ window.addEventListener("DOMContentLoaded", function() {
 		
 	<div id="photomaton" style="display:none;position:relative;">
 		<div style="position:absolute;top:0px;left:0px;width:100%;">
-			<video id="video">
+			<video id="video"></video>
 		</div>
 		<div style="position:absolute;top:0px;left:0px;width:100%;">
 			<div style="display:none;position:relative;margin:auto;color:#FFF;text-align:center;font-size:20px;padding:10px 0;">
@@ -592,7 +592,7 @@ window.addEventListener("DOMContentLoaded", function() {
                 <div id="resize-handle" class="resize-handle" draggable="true">
                     <div class="tooltip" style="margin-top:10px;">
                         <svg viewBox="0 0 50 50" class="tooltippointer">
-                            <polygon points="0,50 50,50 0,0"/>
+				<polygon points="0,50 50,50 0,0"></polygon>
                         </svg>
                         <span class="tooltiptext" style="border-radius:0px 6px 6px 6px;">Resize Me</span>
                     </div>
