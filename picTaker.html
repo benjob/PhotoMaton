@@ -385,57 +385,31 @@ function showPhotomaton() {
         });
     }
 
+    var onOpenStream = function(stream) {
+        //only 1 media stream
+        if ( stream.getTracks ) {
+            track = stream.getTracks()[0];
+        }
+
+        video.addEventListener('loadedmetadata', function() {
+            adjustUIForVideo();
+        }, false);
+			
+        if (typeof (video.srcObject) !== 'undefined') {
+            video.srcObject = stream;
+        } else {
+            video.src = URL.createObjectURL(stream);
+        }		
+        video.play();
+    }
+
     // Put video listeners into place
-    if(navigator.getUserMedia) {
-        navigator.getUserMedia(videoObj, function(stream) {
-            //only 1 media stream
-            if ( stream.getTracks ) {
-                track = stream.getTracks()[0];
-            }
-
-            video.addEventListener('loadedmetadata', function() {
-                adjustUIForVideo();
-            }, false);
-			
-            if (typeof (video.srcObject) !== 'undefined') {
-                video.srcObject = stream;
-            } else {
-                video.src = URL.createObjectURL(stream);
-            }		
-            video.play();
-	}, errBack);
-    } else if(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        navigator.mediaDevices.getUserMedia(videoObj).then(function(stream){
-            //only 1 media stream
-            if ( stream.getTracks ) {
-                track = stream.getTracks()[0];
-            }
-
-            video.addEventListener('loadedmetadata', function() {
-                adjustUIForVideo();
-            }, false);
-
-            if (typeof (video.srcObject) !== 'undefined') {
-                video.srcObject = stream;
-            } else {
-                video.src = URL.createObjectURL(stream);
-            }
-            video.play();
-        }, errBack);
+    if(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia(videoObj).then(onOpenStream, errBack);
+    } else if(navigator.getUserMedia) {
+        navigator.getUserMedia(videoObj, onOpenStream, errBack);
     } else if(navigator.webkitGetUserMedia) { // WebKit-prefixed
-        navigator.webkitGetUserMedia(videoObj, function(stream){
-            //only 1 media stream
-            if ( stream.getTracks ) {
-                track = stream.getTracks()[0];
-            }
-
-            video.addEventListener('loadedmetadata', function() {
-                adjustUIForVideo();
-            }, false);
-			
-            video.src = window.webkitURL.createObjectURL(stream);
-            video.play();
-        }, errBack);
+        navigator.webkitGetUserMedia(videoObj, onOpenStream, errBack);
     } 
 }
 
@@ -535,7 +509,7 @@ window.addEventListener("DOMContentLoaded", function() {
     document.addEventListener("dragend", onDragEnd);
     document.addEventListener("dragend", onDragEnd);
 
-	if( !(navigator.getUserMedia || (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) || navigator.webkitGetUserMedia || navigator.mozGetUserMedia) ) {
+	if( !((navigator.mediaDevices && navigator.mediaDevices.getUserMedia) || navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia) ) {
 		document.getElementById("photomatonBtn").style.display = "none";
 	}
 
