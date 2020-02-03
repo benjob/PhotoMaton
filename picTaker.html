@@ -164,7 +164,7 @@ var getCumulativeOffset = function(element) {
 };
 
 //Global variables
-var methodpicker, photomaton, video, editor, canvas, crop, resizeHandle, dragImage, reviewButton, reviewer, reviewCanvas, reviewerButtons;
+var methodpicker, photomaton, video, editor, canvas, crop, resizeHandle, dragImage, reviewButton, reviewer, reviewCanvas, isResizingExport, exporterCanvas, exporterReviewCanvas, reviewerButtons;
 
 //Setup the dragging over the document.
 var previousPos = [0, 0],
@@ -318,46 +318,89 @@ var onDragEnd = function () {
 
 //This is called in the reviewer to go back and crop differently
 function goBackToEditor() {
-	methodpicker.style.display = "none";
-	photomaton.style.display = "none";
-	reviewer.style.display = "none";
-	editor.style.display = "inline-block";
+    methodpicker.style.display = "none";
+    photomaton.style.display = "none";
+    reviewer.style.display = "none";
+    editor.style.display = "inline-block";
 }
 
 function showReviewer() {
-	methodpicker.style.display = "none";
-	photomaton.style.display = "none";
-	editor.style.display = "none";
+    methodpicker.style.display = "none";
+    photomaton.style.display = "none";
+    editor.style.display = "none";
 	
-	var image = canvas.toDataURL();
-	var img = new Image();
-	img.src = image;
-	var context = reviewCanvas.getContext("2d");
-	img.onload = function() {
-    	reviewCanvas.width = cropDimensions.width;
-    	reviewCanvas.height = cropDimensions.height;
-        
-    	context.drawImage(img, cropDimensions.marginLeft, cropDimensions.marginTop, cropDimensions.width, cropDimensions.height, 0, 0, cropDimensions.width, cropDimensions.height);
+    var image = canvas.toDataURL();
+    var img = new Image();
+    img.src = image;
+    img.onload = function() {
+        var context = reviewCanvas.getContext("2d");
+        reviewCanvas.width = cropDimensions.width;
+        reviewCanvas.height = cropDimensions.height;
+        context.drawImage(img,
+                          cropDimensions.marginLeft,
+                          cropDimensions.marginTop,
+                          cropDimensions.width,
+                          cropDimensions.height,
+                          0,
+                          0,
+                          cropDimensions.width,
+                          cropDimensions.height);
     	
-    	reviewer.style.width = cropDimensions.width + "px";
-    	reviewer.style.display = "inline-block";
+        if ( isResizingExport ) {
+            
+            var exporterImage = exporterCanvas.toDataURL();
+            var exporterImg = new Image();
+            exporterImg.src = exporterImage;
 
-    	reviewerButtons.style.top = (reviewCanvas.height + 10).toString() + "px";
-	};
+            exporterImg.onload = function () {
+                var exporterReviewContext = exporterReviewCanvas.getContext("2d");
+                var widthRatio = (exporterCanvas.width / canvas.width);
+                var heightRatio = (exporterCanvas.height / canvas.height);
+            
+                exporterReviewCanvas.width = cropDimensions.width * widthRatio;
+                exporterReviewCanvas.height = cropDimensions.height * heightRatio;
+
+                exporterReviewContext.drawImage(exporterImg, 
+                                                 cropDimensions.marginLeft * widthRatio,
+                                                 cropDimensions.marginTop * heightRatio,
+                                                 cropDimensions.width * widthRatio,
+                                                 cropDimensions.height * heightRatio,
+                                                 0,
+                                                 0,
+                                                 cropDimensions.width * widthRatio,
+                                                 cropDimensions.height * heightRatio);
+
+                // show the reviewer
+                reviewer.style.width = cropDimensions.width + "px";
+                reviewer.style.display = "inline-block";
+                reviewerButtons.style.top = (reviewCanvas.height + 10).toString() + "px";
+            };
+
+        } else {
+            // show the reviewer
+            reviewer.style.width = cropDimensions.width + "px";
+            reviewer.style.display = "inline-block";
+            reviewerButtons.style.top = (reviewCanvas.height + 10).toString() + "px";
+        }
+    };
+
+    if ( isResizingExport ) {
+        
+    }
 }
 
 function showPhotomaton() {
-	methodpicker.style.display = "none";
-	photomaton.style.display = "inline-block";
-	reviewer.style.display = "none";
-	
-	// Grab elements, create settings, etc.
-	var errBack = function(error) {
-			console.log("Video capture error: ", error.code); 
-		},
-		track;
+    methodpicker.style.display = "none";
+    photomaton.style.display = "inline-block";
+    reviewer.style.display = "none";
 
-	function adjustUIForVideo() {
+    // Grab elements, create settings, etc.
+    var errBack = function(error) {
+        console.log("Video capture error: ", error.code); 
+    },
+    track;
+
+    function adjustUIForVideo() {
         //Trigger photo take
         photomaton.style.width = (video.videoWidth).toString() + "px";
         var takePhotoBtn = document.getElementById("takePhotoBtn");
@@ -372,11 +415,11 @@ function showPhotomaton() {
             context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
 
             //Stop the video
-		    if ( track != null ) {
+            if ( track != null ) {
                 track.stop();
-		    } else {
-		        video.pause();
-		    }
+            } else {
+                video.pause();
+            }
 
             //Switch the video and the canvas
             photomaton.style.display = "none";
@@ -414,44 +457,47 @@ function showPhotomaton() {
 }
 
 function saveCroppedImage() {
-	var saveData = (function () {
-		if ( window.navigator.msSaveOrOpenBlob ) {
-			//To support older IEs.
-			return function (blob, fileName) {
-				window.navigator.msSaveOrOpenBlob(blob, fileName);
-			}
-		} else {
-			//To support everything else
-		    var a = document.createElement("a");
-		    a.style.display= "none";
-		    document.body.appendChild(a);
-		    return function (blob, fileName) {
-		    	if(window.navigator.msSaveOrOpenBlob) {
-			    	window.navigator.msSaveOrOpenBlob(blob, fileName);
-		        } else {
-		            var url = window.URL.createObjectURL(blob);
-			        a.href = url;
-			        a.download = fileName;
-			        a.click();
-			        setTimeout(function(){
-			            document.body.removeChild(a);
-			            window.URL.revokeObjectURL(url);  
-			        }, 100);
-		        }
-		    };
-		}
-	}());
+    var saveData = (function () {
+        if ( window.navigator.msSaveOrOpenBlob ) {
+            //To support older IEs.
+            return function (blob, fileName) {
+                window.navigator.msSaveOrOpenBlob(blob, fileName);
+            }
+        } else {
+            //To support everything else
+            var a = document.createElement("a");
+            a.style.display= "none";
+            document.body.appendChild(a);
+            return function (blob, fileName) {
+                var url = window.URL.createObjectURL(blob);
+                    a.href = url;
+                    a.download = fileName;
+                    a.click();
+                    setTimeout(function(){
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);  
+                }, 100);
+            };
+        }
+    }());
 	
-	var dataURL = reviewCanvas.toDataURL("image/png");
-	var data = atob( dataURL.replace(/^.*?base64,/, '') );
-	asArray = new Uint8Array(data.length);
-	for( var i = 0, len = data.length; i < len; ++i ) {
-	    asArray[i] = data.charCodeAt(i);    
-	}
+    var dataURL;
+    if ( isResizingExport ) {
+        dataURL = exporterReviewCanvas.toDataURL("image/png");
+
+    } else {
+        dataURL = reviewCanvas.toDataURL("image/png");
+    }
+
+    var data = atob( dataURL.replace(/^.*?base64,/, '') );
+    asArray = new Uint8Array(data.length);
+    for( var i = 0, len = data.length; i < len; ++i ) {
+        asArray[i] = data.charCodeAt(i);    
+    }
     var blob = new Blob( [ asArray.buffer ], { type: "image/png" } );
     saveData(blob, "image.png");
     
-	return false;
+    return false;
 }
 
 function handleLocalFile( file ) {
@@ -462,6 +508,7 @@ function handleLocalFile( file ) {
             var image = event.target.result;
 
             //Get the image orientation
+            //So we can display EXIF files properly
             var orientation;
             var view = new DataView(image);
             if (view.getUint16(0, false) != 0xFFD8) {
@@ -513,10 +560,15 @@ function loadLocalFile(file, orientation) {
 	    
 	    img.onload = function() {
                 var context = canvas.getContext("2d");
+                var exporterContext = exporterCanvas.getContext("2d");
 
                 if ( this.width > MAX_WIDTH ) {
                     canvas.width = MAX_WIDTH;
                     canvas.height = MAX_WIDTH * (this.height/this.width);
+
+                    isResizingExport = true;
+                    exporterCanvas.width = this.width;
+                    exporterCanvas.height = this.height;
                 } else {
                     canvas.width = this.width;
                     canvas.height = this.height;
@@ -528,6 +580,12 @@ function loadLocalFile(file, orientation) {
                         context.translate(canvas.width, canvas.height);
                         context.rotate(Math.PI);
                         context.drawImage(this, 0, 0, canvas.width, canvas.height);
+
+                        if ( isResizingExport ) {
+                            exporterContext.translate(exporterCanvas.width, exporterCanvas.height);
+                            exporterContext.rotate(Math.PI);
+                            exporterContext.drawImage(this, 0, 0, exporterCanvas.width, exporterCanvas.height);
+                        }
                         break;
                     case 6:
                         // rotate 90 degree.
@@ -536,10 +594,20 @@ function loadLocalFile(file, orientation) {
                         if ( canvas.width > MAX_WIDTH ) {
                             canvas.width = MAX_WIDTH
                             canvas.height = MAX_WIDTH * (this.width/this.height)
+
+                            isResizingExport = true;
+                            exporterCanvas.width = this.height;
+                            exporterCanvas.height = this.width;
                         }
                         context.translate(canvas.width / 2, canvas.height / 2);
                         context.rotate(0.5 * Math.PI);
                         context.drawImage(this, -canvas.height / 2, -canvas.width / 2, canvas.height, canvas.width);
+
+                        if ( isResizingExport ) {
+                            exporterContext.translate(exporterCanvas.width / 2, exporterCanvas.height / 2);
+                            exporterContext.rotate(0.5 * Math.PI);
+                            exporterContext.drawImage(this, -exporterCanvas.height / 2, -exporterCanvas.width / 2, exporterCanvas.height, exporterCanvas.width);
+                        }
                         break;
                     case 8:
                         // rotate 90 degree, counter-clockwise.
@@ -548,15 +616,28 @@ function loadLocalFile(file, orientation) {
                         if ( canvas.width > MAX_WIDTH ) {
                             canvas.width = MAX_WIDTH
                             canvas.height = MAX_WIDTH * (this.width/this.height)
+
+                            isResizingExport = true;
+                            exporterCanvas.width = this.height;
+                            exporterCanvas.height = this.width;
                         }
                         context.translate(canvas.width / 2, canvas.height / 2);
                         context.rotate(-0.5 * Math.PI);
-                        //context.translate(-canvas.height / 2, canvas.width / 2);
                         context.drawImage(this, -canvas.height / 2, -canvas.width / 2, canvas.height, canvas.width);
-                        //context.drawImage(this, 0, 0, canvas.width, canvas.height);
+
+                        
+                        if ( isResizingExport ) {
+                            exporterContext.translate(exporterCanvas.width / 2, exporterCanvas.height / 2);
+                            exporterContext.rotate(-0.5 * Math.PI);
+                            exporterContext.drawImage(this, -exporterCanvas.height / 2, -exporterCanvas.width / 2, exporterCanvas.height, exporterCanvas.width);
+                        }
                         break;
                     default:
                         context.drawImage(this, 0, 0, canvas.width, canvas.height);
+
+                        if ( isResizingExport ) {
+                            exporterContext.drawImage(this, 0, 0, exporterCanvas.width, exporterCanvas.height);
+                        }
                         break;
                 }
 	    	
@@ -570,18 +651,21 @@ function loadLocalFile(file, orientation) {
 
 // Initialize everything on load
 window.addEventListener("DOMContentLoaded", function() {
-	methodpicker = document.getElementById("methodpicker");
-	photomaton = document.getElementById("photomaton");
-	video = document.getElementById("video");
-	editor = document.getElementById("editor");
-	canvas = document.getElementById("canvas");
-	crop = document.getElementById("crop");
-	resizeHandle = document.getElementById("resize-handle");
-	dragImage = document.getElementById("dragImage");
-	reviewButton = document.getElementById("reviewButton");
-	reviewer = document.getElementById("reviewer");
-	reviewCanvas = document.getElementById("reviewCanvas"),
-	reviewerButtons = document.getElementById("reviewerButtons");
+    methodpicker = document.getElementById("methodpicker");
+    photomaton = document.getElementById("photomaton");
+    video = document.getElementById("video");
+    editor = document.getElementById("editor");
+    canvas = document.getElementById("canvas");
+    crop = document.getElementById("crop");
+    resizeHandle = document.getElementById("resize-handle");
+    dragImage = document.getElementById("dragImage");
+    reviewButton = document.getElementById("reviewButton");
+    reviewer = document.getElementById("reviewer");
+    isResizingExport = false;
+    reviewCanvas = document.getElementById("reviewCanvas"),
+    reviewerButtons = document.getElementById("reviewerButtons");
+    exporterCanvas = document.getElementById("exporterCanvas");
+    exporterReviewCanvas = document.getElementById("exporterReviewCanvas");
 
     //on safari, if I set a dragstart, then the dragover events do not get fired.
     //this is sad because it is the only way to set the ghost image...
@@ -591,16 +675,16 @@ window.addEventListener("DOMContentLoaded", function() {
     document.addEventListener("dragend", onDragEnd);
     document.addEventListener("dragend", onDragEnd);
 
-	if( !((navigator.mediaDevices && navigator.mediaDevices.getUserMedia) || navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia) ) {
-		document.getElementById("photomatonBtn").style.display = "none";
-	}
+    if( !((navigator.mediaDevices && navigator.mediaDevices.getUserMedia) || navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia) ) {
+        document.getElementById("photomatonBtn").style.display = "none";
+    }
 
     //start the drag listeners
-	document.addEventListener("dragover", function (event) {
-		console.log("dragover");
-        event.preventDefault();
-		onDrag( event );
-	});
+    document.addEventListener("dragover", function (event) {
+        console.log("dragover");
+    event.preventDefault();
+        onDrag( event );
+    });
     document.addEventListener("drop", function(event) {
         event.preventDefault();
         if ( event.target == crop ) {
@@ -672,6 +756,9 @@ window.addEventListener("DOMContentLoaded", function() {
 	</div>
 	
 	<svg id="dragImage" style="height:1px;width:1px;" viewBox="0 0 10 10"></svg>
+
+        <canvas id="exporterCanvas" style="display:none;"></canvas>
+        <canvas id="exporterReviewCanvas" style="display:none;"></canvas>
 </div>
 
 
